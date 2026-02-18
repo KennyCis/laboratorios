@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { 
   Container, Typography, Box, Button, Chip, 
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, 
-  MenuItem, Paper, Divider, Grid
+  MenuItem, Paper, Divider, Grid, IconButton 
 } from "@mui/material";
 
 // Iconos
@@ -12,6 +12,7 @@ import BuildIcon from '@mui/icons-material/Build';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import api from "../api/axios";
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import DeleteIcon from '@mui/icons-material/Delete'; // <--- IMPORTANTE
 
 function LabDetailPage() {
   const { id } = useParams();
@@ -38,7 +39,6 @@ function LabDetailPage() {
         setLab(res.data);
     } catch (e) { 
         console.error(e);
-        // Si falla, es probable que sea el 404 del backend antiguo
     } finally {
         setLoading(false);
     }
@@ -49,19 +49,18 @@ function LabDetailPage() {
   // 2. Handlers (Guardar datos)
   const handleSaveItem = async () => {
     try {
-        // AHORA ENVIAMOS UN JSON (BODY), NO URL PARAMS
         await api.put(`/laboratories/${id}/add-item`, {
             code: formData.code,
             type: formData.type,
             status: formData.status,
             area: formData.area,
-            acquisition_date: formData.date || "2026-01-01" // Fecha por defecto si está vacía
+            acquisition_date: formData.date || "2026-01-01" 
         });
         
         setOpenAdd(false);
         setFormData({ code: "", type: "Computadora", status: "Operativa", area: "", date: "" });
         fetchLab();
-        alert("¡Máquina guardada correctamente!"); // Feedback visual
+        alert("¡Máquina guardada correctamente!"); 
     } catch (e) { 
         console.error(e);
         alert("Error al guardar: " + (e.response?.data?.detail || "Error desconocido")); 
@@ -69,37 +68,35 @@ function LabDetailPage() {
   };
 
   const handleSaveMaintenance = async () => {
-     try {
-         // CORRECCIÓN: Enviamos un objeto JSON como segundo argumento, NO params
-         await api.post(`/laboratories/${id}/items/${selectedItem.id}/maintenance`, {
-             technician: maintData.technician,
-             type: maintData.type,
-             description: maintData.description
-         });
-         
-         setOpenMaint(false);
-         setMaintData({ technician: "", type: "Preventivo", description: "" });
-         fetchLab();
-         alert("Mantenimiento registrado con éxito");
-     } catch (e) { 
-         console.error(e);
-         alert("Error al registrar: Verifica que todos los campos estén llenos."); 
-     }
+      try {
+          await api.post(`/laboratories/${id}/items/${selectedItem.id}/maintenance`, {
+              technician: maintData.technician,
+              type: maintData.type,
+              description: maintData.description
+          });
+          
+          setOpenMaint(false);
+          setMaintData({ technician: "", type: "Preventivo", description: "" });
+          fetchLab();
+          alert("Mantenimiento registrado con éxito");
+      } catch (e) { 
+          console.error(e);
+          alert("Error al registrar: Verifica que todos los campos estén llenos."); 
+      }
   };
 
   const handleUpdateItem = async () => {
       try {
-        // CORRECCIÓN: Enviamos JSON directo (Body), NO params
         await api.put(`/laboratories/${id}/items/${selectedItem.id}`, {
             code: formData.code,
             type: formData.type,
             status: formData.status,
-            area: formData.area || "General", // Evitamos vacíos
+            area: formData.area || "General", 
             acquisition_date: formData.date || "2024-01-01"
         });
         
         setOpenUpdate(false);
-        fetchLab(); // Esto refresca la lista al instante
+        fetchLab(); 
         alert("Máquina actualizada correctamente");
       } catch (e) { 
         console.error(e);
@@ -107,7 +104,20 @@ function LabDetailPage() {
       }
   };
 
-  // Abrir modales y cargar datos previos si es necesario
+  // --- NUEVO: FUNCIÓN ELIMINAR MÁQUINA ---
+  const handleDeleteItem = async (itemId, name) => {
+      if(window.confirm(`¿Estás seguro de ELIMINAR la máquina "${name}"? Esta acción no se puede deshacer.`)) {
+          try {
+              await api.delete(`/laboratories/${id}/items/${itemId}`);
+              fetchLab(); // Recargar la lista
+          } catch (e) {
+              console.error(e);
+              alert("Error al eliminar la máquina");
+          }
+      }
+  };
+
+  // Abrir modales
   const openModal = (type, item) => {
       setSelectedItem(item);
       if (type === 'history') setOpenHistory(true);
@@ -119,12 +129,12 @@ function LabDetailPage() {
   };
 
   if (loading) return <Typography sx={{ mt: 5, textAlign: 'center' }}>Cargando...</Typography>;
-  if (!lab) return <Typography sx={{ mt: 5, textAlign: 'center', color: 'red', fontWeight: 'bold' }}>Error: No se pudo cargar el laboratorio. Revisa que el Backend tenga la ruta GET /{id}</Typography>;
+  if (!lab) return <Typography sx={{ mt: 5, textAlign: 'center', color: 'red', fontWeight: 'bold' }}>Error: No se pudo cargar el laboratorio.</Typography>;
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       
-      {/* HEADER AZUL CLARO (Como tu imagen) */}
+      {/* HEADER AZUL CLARO */}
       <Paper elevation={0} sx={{ p: 2, bgcolor: '#e3f2fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, border: '1px solid #90caf9' }}>
         <Box display="flex" alignItems="center" gap={2}>
             <Box sx={{ bgcolor: '#2196f3', p: 1.5, borderRadius: 2, color: 'white' }}>
@@ -145,24 +155,24 @@ function LabDetailPage() {
         <Button variant="contained" sx={{ bgcolor: '#29b6f6' }} onClick={() => navigate("/dashboard")}>Regresar</Button>
       </Box>
 
-      {/* --- LISTA DE MAQUINAS (Estilo Imagen image_6b7477) --- */}
+      {/* --- LISTA DE MAQUINAS --- */}
       <Box display="flex" flexDirection="column" gap={2}>
         {lab.items?.map((item) => (
             <Paper key={item.id} elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderLeft: item.status === 'Operativa' ? '5px solid #4caf50' : '5px solid #f44336' }}>
                 
                 {/* Info Izquierda */}
                 <Box display="flex" alignItems="center" gap={3} flex={1}>
-                    <Box sx={{ width: 50, height: 50, bgcolor: '#0277bd', borderRadius: 1 }}></Box> {/* Foto placeholder azul oscuro */}
+                    <Box sx={{ width: 50, height: 50, bgcolor: '#0277bd', borderRadius: 1 }}></Box> 
                     <Box>
-                        <Typography variant="h6" fontWeight="bold">{item.name}</Typography> {/* CODIGO */}
-                        <Typography variant="body2" color="text.secondary">Suficiencia-A | 2024-12-13 | Computadora</Typography>
+                        <Typography variant="h6" fontWeight="bold">{item.name || item.code}</Typography> 
+                        <Typography variant="body2" color="text.secondary">{item.area} | {item.type}</Typography>
                     </Box>
                 </Box>
 
                 {/* Estado */}
                 <Box sx={{ minWidth: 150, textAlign: 'center' }}>
                     <Chip 
-                        label={item.status.toUpperCase()} 
+                        label={item.status ? item.status.toUpperCase() : "DESCONOCIDO"} 
                         sx={{ 
                             bgcolor: item.status === 'Operativa' ? '#4caf50' : '#f44336', 
                             color: 'white', 
@@ -172,8 +182,8 @@ function LabDetailPage() {
                     />
                 </Box>
 
-                {/* Botones de Acción (Amarillo, Azul, Verde) */}
-                <Box display="flex" flexDirection="column" gap={1} ml={4}>
+                {/* Botones de Acción */}
+                <Box display="flex" alignItems="center" gap={1} ml={4}>
                     <Button 
                         variant="contained" size="small" 
                         sx={{ bgcolor: '#fdd835', color: 'black', fontWeight: 'bold', '&:hover': { bgcolor: '#fbc02d' } }}
@@ -195,12 +205,26 @@ function LabDetailPage() {
                     >
                         Actualizar
                     </Button>
+                    
+                    {/* --- NUEVO: BOTÓN ELIMINAR --- */}
+                    <IconButton 
+                        color="error" 
+                        sx={{ bgcolor: '#ffebee', '&:hover': { bgcolor: '#ffcdd2' } }}
+                        onClick={() => handleDeleteItem(item.id, item.name || item.code)}
+                    >
+                        <DeleteIcon />
+                    </IconButton>
                 </Box>
             </Paper>
         ))}
+        {(!lab.items || lab.items.length === 0) && (
+            <Typography variant="body1" textAlign="center" color="text.secondary" sx={{mt:4}}>
+                No hay máquinas registradas en este laboratorio.
+            </Typography>
+        )}
       </Box>
 
-      {/* --- MODAL AGREGAR (Blanco Limpio) --- */}
+      {/* --- MODAL AGREGAR --- */}
       <Dialog open={openAdd} onClose={() => setOpenAdd(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight="bold">Agregar Máquina</DialogTitle>
         <DialogContent>
@@ -224,7 +248,7 @@ function LabDetailPage() {
         </DialogActions>
       </Dialog>
 
-       {/* --- MODAL ACTUALIZAR (Igual al Agregar) --- */}
+       {/* --- MODAL ACTUALIZAR --- */}
        <Dialog open={openUpdate} onClose={() => setOpenUpdate(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight="bold">Actualizar Máquina</DialogTitle>
         <DialogContent>
@@ -251,7 +275,6 @@ function LabDetailPage() {
         <DialogTitle fontWeight="bold">Registro de mantenimiento</DialogTitle>
         <DialogContent>
             <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField label="Empresa/Institución" fullWidth placeholder="Especificar cargo" />
                 <Box display="flex" gap={1}>
                     <TextField label="Técnico Responsable" fullWidth value={maintData.technician} onChange={(e) => setMaintData({...maintData, technician: e.target.value})} />
                     <TextField select label="Tipo" fullWidth value={maintData.type} onChange={(e) => setMaintData({...maintData, type: e.target.value})}>
@@ -285,7 +308,7 @@ function LabDetailPage() {
             ) : (
                 selectedItem.maintenance_history.map((log, idx) => (
                     <Grid container spacing={1} key={idx} sx={{ py: 1, borderBottom: '1px solid #eee' }}>
-                        <Grid item xs={3}>{log.date}</Grid>
+                        <Grid item xs={3}>{log.date || "2026-02-15"}</Grid>
                         <Grid item xs={2}>{log.type}</Grid>
                         <Grid item xs={3}>{log.technician}</Grid>
                         <Grid item xs={4}>{log.description}</Grid>

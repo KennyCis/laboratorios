@@ -2,27 +2,32 @@ import { useEffect, useState } from "react";
 import { 
     Container, Typography, TextField, Button, Paper, Table, TableBody, TableCell, 
     TableHead, TableRow, Chip, Box, Dialog, DialogTitle, DialogContent, DialogActions, 
-    Alert, AlertTitle 
+    Alert, AlertTitle, IconButton // <--- AGREGADO
 } from "@mui/material";
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import StorageIcon from '@mui/icons-material/Storage';
+import EditIcon from '@mui/icons-material/Edit'; // <--- AGREGADO
+import DeleteIcon from '@mui/icons-material/Delete'; // <--- AGREGADO
 import api from "../api/axios";
 
 function ReportPage() {
   const [items, setItems] = useState([]);
-  const [source, setSource] = useState("Cargando..."); // 'MySQL' o 'REDIS'
+  const [source, setSource] = useState("Cargando..."); 
   const [search, setSearch] = useState("");
   
   // Estado para el modal de agregar
   const [open, setOpen] = useState(false);
   const [newItem, setNewItem] = useState({ code: "", type: "PC", status: "Operativa", area: "Sala 1" });
-  const [saveStatus, setSaveStatus] = useState(null); // Para mostrar mensaje de éxito/warning
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  // --- NUEVO: ESTADOS PARA EDITAR ---
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editItem, setEditItem] = useState({ id: 0, code: "", type: "", status: "", area: "" });
 
   // 1. LISTAR (GET)
   const fetchItems = async () => {
     try {
         const res = await api.get("/laboratories/items");
-        // El backend devuelve: { source: "MySQL"|"REDIS...", data: [...] }
         setItems(res.data.data || []);
         setSource(res.data.source || "Desconocido");
     } catch (err) {
@@ -33,7 +38,6 @@ function ReportPage() {
 
   useEffect(() => {
     fetchItems();
-    // Refrescar cada 5s para ver si cambia la fuente automáticamente al apagar MySQL
     const interval = setInterval(fetchItems, 5000); 
     return () => clearInterval(interval);
   }, []);
@@ -42,15 +46,13 @@ function ReportPage() {
   const handleSave = async () => {
       try {
           const res = await api.post("/laboratories/items", newItem);
-          // El backend devuelve: { source: "MySQL"|"REDIS_BACKUP", ... }
           
           if (res.data.source === "MySQL") {
               setSaveStatus({ type: "success", msg: "✅ Guardado correctamente en MySQL (BD Principal)" });
           } else {
               setSaveStatus({ type: "warning", msg: "⚠️ BD SATURADA. Guardado temporalmente en Redis (Respaldo)" });
           }
-          fetchItems(); // Recargar lista
-          // Limpiar form
+          fetchItems(); 
           setTimeout(() => {
              setOpen(false); 
              setSaveStatus(null);
@@ -62,9 +64,55 @@ function ReportPage() {
       }
   };
 
+  // --- NUEVO: 3. ELIMINAR (DELETE) ---
+  const handleDelete = async (id) => {
+      if(!window.confirm("¿Seguro que deseas eliminar este equipo?")) return;
+
+      try {
+          await api.delete(`/laboratories/items/${id}`);
+          fetchItems(); // Recargar la lista
+      } catch (e) {
+          alert("Error al eliminar: Posiblemente MySQL no responde.");
+      }
+  };
+
+  // --- NUEVO: 4. EDITAR (PUT) ---
+  const handleEditOpen = (item) => {
+      // Cargamos los datos del item en el formulario de edición
+      // Mapeamos 'name' a 'code' si viene del backend así, o usamos 'code' directo
+      setEditItem({ 
+          id: item.id,
+          code: item.name || item.code, // Ajuste por si el backend manda 'name'
+          type: item.type,
+          status: item.status,
+          area: item.area
+      });
+      setOpenEdit(true);
+  };
+
+  const handleUpdate = async () => {
+      try {
+          // Enviamos los datos actualizados
+          await api.put(`/laboratories/items/${editItem.id}`, {
+             code: editItem.code,
+             type: editItem.type,
+             status: editItem.status,
+             area: editItem.area
+          });
+          setOpenEdit(false);
+          fetchItems();
+          alert("Actualizado correctamente en MySQL");
+      } catch (e) {
+          alert("Error al actualizar: Verifica la conexión a MySQL.");
+      }
+  };
+
   const filteredData = items.filter(row => 
-      (row.code || "").toLowerCase().includes(search.toLowerCase())
+      (row.name || row.code || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  // Determinamos si es solo lectura (Si NO es MySQL, bloqueamos botones)
+  const isReadOnly = !source.includes("MySQL");
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4 }}>
@@ -87,11 +135,10 @@ function ReportPage() {
         </Button>
       </Box>
       
-      {/* ALERTA SI ESTAMOS EN MODO RESPALDO */}
       {source.includes("REDIS") && (
           <Alert severity="warning" sx={{ mb: 2 }}>
               <AlertTitle>Modo de Emergencia Activado</AlertTitle>
-              La base de datos principal no responde. <strong>Visualizando datos cacheados en Redis.</strong>
+              La base de datos principal no responde. <strong>Visualizando datos cacheados en Redis. (Edición Deshabilitada)</strong>
           </Alert>
       )}
 
@@ -112,27 +159,45 @@ function ReportPage() {
                     <TableCell>TIPO</TableCell>
                     <TableCell>ESTADO</TableCell>
                     <TableCell>ÁREA</TableCell>
+                    <TableCell align="center">ACCIONES</TableCell> {/* COLUMNA NUEVA */}
                 </TableRow>
             </TableHead>
             <TableBody>
                 {filteredData.map((row, idx) => (
                     <TableRow key={idx} hover>
-                        <TableCell sx={{ fontWeight: 'bold', color: '#1565c0' }}>{row.code}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: '#1565c0' }}>{row.name || row.code}</TableCell>
                         <TableCell>{row.type}</TableCell>
                         <TableCell>{row.status}</TableCell>
                         <TableCell>{row.area}</TableCell>
+                        <TableCell align="center">
+                            {/* BOTONES DE ACCIÓN (Deshabilitados si es Redis) */}
+                            <IconButton 
+                                color="primary" 
+                                onClick={() => handleEditOpen(row)}
+                                disabled={isReadOnly}
+                            >
+                                <EditIcon />
+                            </IconButton>
+                            <IconButton 
+                                color="error" 
+                                onClick={() => handleDelete(row.id)}
+                                disabled={isReadOnly}
+                            >
+                                <DeleteIcon />
+                            </IconButton>
+                        </TableCell>
                     </TableRow>
                 ))}
                 {filteredData.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={4} align="center">No hay datos registrados</TableCell>
+                        <TableCell colSpan={5} align="center">No hay datos registrados</TableCell>
                     </TableRow>
                 )}
             </TableBody>
         </Table>
       </Paper>
 
-      {/* MODAL DE AGREGAR */}
+      {/* MODAL DE AGREGAR (TU CÓDIGO ORIGINAL) */}
       <Dialog open={open} onClose={() => setOpen(false)}>
           <DialogTitle>Agregar Nueva Máquina</DialogTitle>
           <DialogContent sx={{ minWidth: 400 }}>
@@ -158,6 +223,29 @@ function ReportPage() {
           <DialogActions>
               <Button onClick={() => setOpen(false)}>Cancelar</Button>
               <Button variant="contained" onClick={handleSave} disabled={!newItem.code}>Guardar</Button>
+          </DialogActions>
+      </Dialog>
+
+      {/* --- NUEVO: MODAL DE EDITAR --- */}
+      <Dialog open={openEdit} onClose={() => setOpenEdit(false)}>
+          <DialogTitle>Editar Máquina (MySQL)</DialogTitle>
+          <DialogContent sx={{ minWidth: 400 }}>
+              <TextField fullWidth margin="dense" label="Código" 
+                  value={editItem.code} onChange={e => setEditItem({...editItem, code: e.target.value})} 
+              />
+              <TextField fullWidth margin="dense" label="Tipo" 
+                  value={editItem.type} onChange={e => setEditItem({...editItem, type: e.target.value})} 
+              />
+              <TextField fullWidth margin="dense" label="Estado" 
+                  value={editItem.status} onChange={e => setEditItem({...editItem, status: e.target.value})} 
+              />
+              <TextField fullWidth margin="dense" label="Área" 
+                  value={editItem.area} onChange={e => setEditItem({...editItem, area: e.target.value})} 
+              />
+          </DialogContent>
+          <DialogActions>
+              <Button onClick={() => setOpenEdit(false)}>Cancelar</Button>
+              <Button variant="contained" color="secondary" onClick={handleUpdate}>Actualizar</Button>
           </DialogActions>
       </Dialog>
 
